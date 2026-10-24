@@ -731,7 +731,7 @@ const lyrics = [
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       analyser = audioCtx.createAnalyser();
       analyser.fftSize = 512;
-      analyser.smoothingTimeConstant = 0.8;
+      analyser.smoothingTimeConstant = 0.55;
       const source = audioCtx.createMediaElementSource(audio);
       source.connect(analyser);
       analyser.connect(audioCtx.destination);
@@ -763,7 +763,7 @@ const lyrics = [
 
   const smooth = new Float32Array(N_HALF);
   const tmp = new Float32Array(N_HALF);
-  let lastNow = 0;
+  let lastNow = 0, peak = 0.3;
 
   function readLevels(now, dt) {
     const raw = levels;
@@ -785,13 +785,18 @@ const lyrics = [
         raw[k] = synthLevel * x * y * (0.62 - (k / N_HALF) * 0.38);
       }
     }
-    // هم‌سایه‌ها را کمی با هم میانگین می‌گیریم تا قله‌های تیز نرم شوند
+    // بلندی را با بلندی خود آهنگ تنظیم می‌کنیم تا میله‌ها همیشه تمام ارتفاع را پر کنند
+    let m = 0;
+    for (let k = 0; k < N_HALF; k++) if (raw[k] > m) m = raw[k];
+    peak = Math.max(peak * Math.pow(0.5, dt / 3000), m, 0.2);
+    for (let k = 0; k < N_HALF; k++) raw[k] = Math.pow(Math.min(1, raw[k] / peak), 1.25);
+    // هم‌سایه‌ها را فقط کمی با هم میانگین می‌گیریم
     for (let k = 0; k < N_HALF; k++) {
       const l = raw[Math.max(0, k - 1)], r = raw[Math.min(N_HALF - 1, k + 1)];
-      tmp[k] = l * 0.25 + raw[k] * 0.5 + r * 0.25;
+      tmp[k] = l * 0.15 + raw[k] * 0.7 + r * 0.15;
     }
-    // بالا رفتن نسبتاً تند، پایین آمدن آرام: موج نمی‌پرد، شناور می‌شود
-    const up = 1 - Math.exp(-dt / 90), down = 1 - Math.exp(-dt / 380);
+    // بالا رفتن تقریباً فوری، پایین آمدن کمی آرام‌تر: ضرب را حس می‌کنی ولی تیک نمی‌زند
+    const up = 1 - Math.exp(-dt / 35), down = 1 - Math.exp(-dt / 160);
     let max = 0;
     for (let k = 0; k < N_HALF; k++) {
       smooth[k] += (tmp[k] - smooth[k]) * (tmp[k] > smooth[k] ? up : down);
